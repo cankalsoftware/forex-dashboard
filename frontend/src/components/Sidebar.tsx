@@ -145,6 +145,7 @@ export default function Sidebar({
             value={config.data_source} 
             onChange={(e) => onConfigChange({ data_source: e.target.value })}
             className="w-full px-3 py-2 text-sm bg-slate-950/80 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors"
+          >
             {sources.map(source => (
               <option key={source} value={source}>
                 {source === 'Twelve Data' || source === 'Oanda' ? `${source} (Live API)` : source}
