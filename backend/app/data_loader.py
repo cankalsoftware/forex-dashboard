@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import yfinance as yfinance_lib
+import requests
 from typing import Optional
 
 # Map standard currency naming to Yahoo Finance tickers
@@ -24,6 +25,11 @@ def download_yf_data(pair: str, interval: str, period: str = "1mo") -> pd.DataFr
     
     # Map timeframe labels to Yahoo Finance intervals
     tf_map = {
+        "1-second": "1m",
+        "3-second": "1m",
+        "5-second": "1m",
+        "10-second": "1m",
+        "30-second": "1m",
         "1-minute": "1m",
         "5-minute": "5m",
         "1-hour": "1h",
@@ -68,6 +74,102 @@ def download_yf_data(pair: str, interval: str, period: str = "1mo") -> pd.DataFr
     # Ensure standard OHLCV columns exist
     df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
     return df
+
+def download_twelvedata(pair: str, interval: str, api_key: str, period: str = "1mo") -> pd.DataFrame:
+    """
+    Downloads historical data from Twelve Data.
+    """
+    if not api_key:
+        raise ValueError("Twelve Data API key is missing. Please add it in the Data Center.")
+        
+    symbol = pair.replace("/", "")  # EUR/USD -> EUR/USD is accepted by TwelveData too, we can just use pair.
+    
+    tf_map = {
+        "1-minute": "1min",
+        "5-minute": "5min",
+        "15-minute": "15min",
+        "30-minute": "30min",
+        "1-hour": "1h",
+        "Daily": "1day",
+        "Weekly": "1week"
+    }
+    td_interval = tf_map.get(interval, "1min")
+    
+    url = f"https://api.twelvedata.com/time_series?symbol={pair}&interval={td_interval}&outputsize=1000&apikey={api_key}"
+    response = requests.get(url)
+    data = response.json()
+    
+    if "status" in data and data["status"] == "error":
+        raise ValueError(f"Twelve Data error: {data.get('message')}")
+        
+    if "values" not in data:
+        raise ValueError("No data returned from Twelve Data")
+        
+    df = pd.DataFrame(data["values"])
+    df['Timestamp'] = pd.to_datetime(df['datetime'], utc=True)
+    df = df.set_index('Timestamp')
+    df = df[['open', 'high', 'low', 'close', 'volume']]
+    df.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+    
+    # Twelve Data returns descending order (newest first). We need ascending (oldest first).
+    df = df.sort_index(ascending=True)
+    return df.astype(float)
+
+def download_oanda(pair: str, interval: str, api_key: str, period: str = "1mo") -> pd.DataFrame:
+    """
+    Downloads historical data from Oanda fxTrade Practice API.
+    """
+    if not api_key:
+        raise ValueError("OANDA API key is missing. Please add it in the Data Center.")
+        
+    instrument = pair.replace("/", "_")  # EUR/USD -> EUR_USD
+    
+    tf_map = {
+        "5-second": "S5",
+        "10-second": "S10",
+        "30-second": "S30",
+        "1-minute": "M1",
+        "5-minute": "M5",
+        "15-minute": "M15",
+        "30-minute": "M30",
+        "1-hour": "H1",
+        "Daily": "D",
+        "Weekly": "W"
+    }
+    granularity = tf_map.get(interval, "M1")
+    
+    url = f"https://api-fxpractice.oanda.com/v3/instruments/{instrument}/candles?count=1000&price=M&granularity={granularity}"
+    headers = {"Authorization": f"Bearer {api_key}"}
+    
+    response = requests.get(url, headers=headers)
+    
+    if response.status_code != 200:
+        raise ValueError(f"Oanda error: {response.text}")
+        
+    data = response.json()
+    if "candles" not in data:
+        raise ValueError("No candles returned from Oanda")
+        
+    rows = []
+    for c in data["candles"]:
+        if c["complete"]:
+            rows.append({
+                "Timestamp": c["time"],
+                "Open": c["mid"]["o"],
+                "High": c["mid"]["h"],
+                "Low": c["mid"]["l"],
+                "Close": c["mid"]["c"],
+                "Volume": c["volume"]
+            })
+            
+    df = pd.DataFrame(rows)
+    if df.empty:
+        raise ValueError("No complete candles returned from Oanda")
+        
+    df['Timestamp'] = pd.to_datetime(df['Timestamp'], utc=True)
+    df = df.set_index('Timestamp')
+    df = df.sort_index(ascending=True)
+    return df.astype(float)
 
 def parse_custom_csv(file_path: str, source: str) -> pd.DataFrame:
     """

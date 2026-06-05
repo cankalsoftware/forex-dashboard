@@ -6,16 +6,20 @@ import { createChart, IChartApi, ISeriesApi, CandlestickData, LineData, SeriesMa
 interface LiveChartProps {
   candles: any[]; // Historical candles: {time, open, high, low, close}
   forecast: any[]; // Forecast data: {time, value, upper, lower}
+  forecastCandles?: any[]; // Forecast phantom candles
   selectedPair: string;
 }
 
-export default function LiveChart({ candles, forecast, selectedPair }: LiveChartProps) {
+export default function LiveChart({ candles, forecast, forecastCandles = [], selectedPair }: LiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const forecastCandleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const forecastSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const upperCorridorRef = useRef<ISeriesApi<'Line'> | null>(null);
   const lowerCorridorRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const trendHighSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const trendLowSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -67,6 +71,17 @@ export default function LiveChart({ candles, forecast, selectedPair }: LiveChart
     });
     candleSeriesRef.current = candleSeries;
 
+    // 2.5 Add Phantom Forecast Candlestick Series
+    const forecastCandleSeries = chart.addSeries(CandlestickSeries, {
+      upColor: 'rgba(99, 102, 241, 0.4)', // Indigo semi-transparent
+      downColor: 'rgba(236, 72, 153, 0.4)', // Pink/Red semi-transparent
+      borderUpColor: 'rgba(99, 102, 241, 0.8)',
+      borderDownColor: 'rgba(236, 72, 153, 0.8)',
+      wickUpColor: 'rgba(99, 102, 241, 0.5)',
+      wickDownColor: 'rgba(236, 72, 153, 0.5)',
+    });
+    forecastCandleSeriesRef.current = forecastCandleSeries;
+
     // 3. Add Forecast Line Series (Dotted Indigo Line)
     const forecastSeries = chart.addSeries(LineSeries, {
       color: '#6366f1',
@@ -92,6 +107,23 @@ export default function LiveChart({ candles, forecast, selectedPair }: LiveChart
       title: 'Lower Band',
     });
     lowerCorridorRef.current = lowerCorridor;
+
+    // 4.5 Add Measurement Trend Guides
+    const trendHighSeries = chart.addSeries(LineSeries, {
+      color: 'rgba(239, 68, 68, 0.4)', // Red
+      lineWidth: 1,
+      lineStyle: 2, // Dotted
+      title: 'Resistance Trend',
+    });
+    trendHighSeriesRef.current = trendHighSeries;
+
+    const trendLowSeries = chart.addSeries(LineSeries, {
+      color: 'rgba(16, 185, 129, 0.4)', // Emerald
+      lineWidth: 1,
+      lineStyle: 2, // Dotted
+      title: 'Support Trend',
+    });
+    trendLowSeriesRef.current = trendLowSeries;
 
     // 5. Handle Responsive Resizing
     const handleResize = () => {
@@ -124,7 +156,52 @@ export default function LiveChart({ candles, forecast, selectedPair }: LiveChart
     
     // Sort just in case timestamps are not in order (TradingView chart requires strict ascending order)
     formattedCandles.sort((a, b) => (a.time as number) - (b.time as number));
-    candleSeriesRef.current.setData(formattedCandles);
+    
+    // Deduplicate: Lightweight-charts throws an error if timestamps are not strictly unique
+    const uniqueCandles = formattedCandles.filter((c, i, a) => i === a.length - 1 || c.time !== a[i + 1].time);
+    
+    candleSeriesRef.current.setData(uniqueCandles);
+
+    // 1.5 Calculate and set Trendline Guides
+    if (uniqueCandles.length > 0) {
+      let highestCandle = uniqueCandles[0];
+      let lowestCandle = uniqueCandles[0];
+      
+      uniqueCandles.forEach(c => {
+        if ((c.high as number) > (highestCandle.high as number)) highestCandle = c;
+        if ((c.low as number) < (lowestCandle.low as number)) lowestCandle = c;
+      });
+
+      const lastCandle = uniqueCandles[uniqueCandles.length - 1];
+
+      if (trendHighSeriesRef.current) {
+        // If highest point is the last candle, the line is just a dot.
+        // Otherwise, draw line from highest high to current close
+        if (highestCandle.time === lastCandle.time) {
+          trendHighSeriesRef.current.setData([
+            { time: highestCandle.time, value: highestCandle.high as number }
+          ]);
+        } else {
+          trendHighSeriesRef.current.setData([
+            { time: highestCandle.time, value: highestCandle.high as number },
+            { time: lastCandle.time, value: lastCandle.close as number }
+          ]);
+        }
+      }
+
+      if (trendLowSeriesRef.current) {
+        if (lowestCandle.time === lastCandle.time) {
+          trendLowSeriesRef.current.setData([
+            { time: lowestCandle.time, value: lowestCandle.low as number }
+          ]);
+        } else {
+          trendLowSeriesRef.current.setData([
+            { time: lowestCandle.time, value: lowestCandle.low as number },
+            { time: lastCandle.time, value: lastCandle.close as number }
+          ]);
+        }
+      }
+    }
 
     // 2. Set forecast path
     if (forecast && forecast.length > 0) {
@@ -154,18 +231,40 @@ export default function LiveChart({ candles, forecast, selectedPair }: LiveChart
       formattedUpper.sort(sortByTime);
       formattedLower.sort(sortByTime);
 
-      forecastSeriesRef.current.setData(formattedForecast);
-      upperCorridorRef.current.setData(formattedUpper);
-      lowerCorridorRef.current.setData(formattedLower);
+      // Deduplicate forecasts
+      const filterUnique = (arr: any[]) => arr.filter((c, i, a) => i === a.length - 1 || c.time !== a[i + 1].time);
+
+      forecastSeriesRef.current.setData(filterUnique(formattedForecast));
+      upperCorridorRef.current.setData(filterUnique(formattedUpper));
+      lowerCorridorRef.current.setData(filterUnique(formattedLower));
       
-      // Auto-fit to view the prediction
-      chartRef.current.timeScale().fitContent();
+      // We purposefully DO NOT call fitContent() here on every tick, 
+      // otherwise it resets the user's manual zoom level. 
+      // The chart will automatically scroll right if you are at the edge.
     } else {
       forecastSeriesRef.current.setData([]);
       upperCorridorRef.current.setData([]);
       lowerCorridorRef.current.setData([]);
     }
-  }, [candles, forecast]);
+
+    // 3. Set forecast phantom candles
+    if (forecastCandles && forecastCandles.length > 0) {
+      const formattedFCandles = forecastCandles.map(c => ({
+        time: c.time,
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close,
+      }));
+      formattedFCandles.sort((a, b) => (a.time as number) - (b.time as number));
+      const filterUnique = (arr: any[]) => arr.filter((c, i, a) => i === a.length - 1 || c.time !== a[i + 1].time);
+      
+      forecastCandleSeriesRef.current?.setData(filterUnique(formattedFCandles));
+    } else {
+      forecastCandleSeriesRef.current?.setData([]);
+    }
+
+  }, [candles, forecast, forecastCandles]);
 
   return (
     <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/40 p-4 backdrop-blur-xl glow-subtle">
@@ -178,6 +277,8 @@ export default function LiveChart({ candles, forecast, selectedPair }: LiveChart
           <span className="flex items-center gap-1"><span className="h-1.5 w-3 bg-[#10b981] inline-block rounded"></span> Bullish</span>
           <span className="flex items-center gap-1"><span className="h-1.5 w-3 bg-[#ef4444] inline-block rounded"></span> Bearish</span>
           <span className="flex items-center gap-1"><span className="h-1.5 w-3 bg-[#6366f1] inline-block rounded border border-dashed border-[#6366f1]"></span> Prediction</span>
+          <span className="flex items-center gap-1 ml-2"><span className="h-0 w-3 border-t border-dotted border-[#ef4444] inline-block"></span> High Trend</span>
+          <span className="flex items-center gap-1"><span className="h-0 w-3 border-t border-dotted border-[#10b981] inline-block"></span> Low Trend</span>
         </div>
       </div>
       <div ref={chartContainerRef} className="w-full h-[450px]" />

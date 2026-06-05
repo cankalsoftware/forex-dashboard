@@ -1,5 +1,5 @@
 import React from 'react';
-import { TrendingUp, TrendingDown, Gauge, ShieldCheck, Activity } from 'lucide-react';
+import { TrendingUp, TrendingDown, Gauge, ShieldCheck, Activity, Briefcase } from 'lucide-react';
 
 interface StatsCardProps {
   prediction: {
@@ -41,9 +41,32 @@ export default function StatsCard({ prediction, metrics, latestCandle, selectedP
 
   const rsiInfo = getRsiStatus(latestCandle?.rsi);
 
+  const getBrokerAdvice = () => {
+    let advice = "";
+    if (prediction.probability_up > 0.65) {
+      advice = "Strong Bullish momentum detected. The predictive engine suggests a high probability of an upward breakout. Consider scaling into a LONG position, placing a stop-loss just below the recent swing low to protect capital.";
+    } else if (prediction.probability_up > 0.55) {
+      advice = "Slight Bullish bias. The market is leaning upwards, but conviction is moderate. If entering LONG, consider reducing position size and wait for confirmation of support.";
+    } else if (prediction.probability_up < 0.35) {
+      advice = "Strong Bearish momentum detected. The predictive engine projects significant downside. Consider a SHORT position, utilizing the recent highest high as a strict stop-loss level.";
+    } else if (prediction.probability_up < 0.45) {
+      advice = "Slight Bearish bias. Downward pressure is building, but the trend isn't fully established. Exercise caution and look for resistance bounces if taking SHORT positions.";
+    } else {
+      advice = "Market is in a neutral consolidation phase. The AI detects conflicting signals. Best professional practice is to stay flat and wait for a clear directional breakout before committing capital.";
+    }
+    
+    if (latestCandle?.rsi) {
+      if (latestCandle.rsi > 70) advice += " Warning: RSI indicates the asset is currently OVERBOUGHT; watch for potential exhaustion or pullbacks before entering.";
+      if (latestCandle.rsi < 30) advice += " Note: RSI indicates the asset is currently OVERSOLD; be alert for potential bounce or reversal opportunities.";
+    }
+    
+    return advice;
+  };
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-      {/* 1. Directional Prediction Widget */}
+    <div className="flex flex-col gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* 1. Directional Prediction Widget */}
       <div className={`rounded-2xl border p-5 backdrop-blur-xl transition-all duration-500 flex flex-col justify-between h-40 ${
         isUp 
           ? 'bg-emerald-950/10 border-emerald-900/50 glow-emerald' 
@@ -148,6 +171,21 @@ export default function StatsCard({ prediction, metrics, latestCandle, selectedP
         <div className="text-[10px] text-slate-500 border-t border-slate-800/40 pt-2">
           Train results based on historical window
         </div>
+      </div>
+      </div>
+
+      {/* 4. Broker's Desk Expert Guidance */}
+      <div className="rounded-2xl border border-indigo-900/50 bg-gradient-to-r from-indigo-950/40 to-slate-900/40 p-5 backdrop-blur-xl glow-subtle">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="p-1.5 bg-indigo-500/20 rounded-lg text-indigo-400">
+            <Briefcase className="h-4 w-4" />
+          </div>
+          <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wide">Broker's Desk Analysis</h3>
+          <span className="ml-auto text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full border border-slate-700">Expert Guidance</span>
+        </div>
+        <p className="text-sm text-slate-300 leading-relaxed border-l-2 border-indigo-500 pl-4">
+          {getBrokerAdvice()}
+        </p>
       </div>
     </div>
   );

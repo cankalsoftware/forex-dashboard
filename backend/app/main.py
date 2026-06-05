@@ -11,7 +11,7 @@ import numpy as np
 from typing import Dict, Any, List, Optional
 import time
 
-from app.data_loader import download_yf_data, parse_custom_csv
+from app.data_loader import download_yf_data, parse_custom_csv, download_twelvedata, download_oanda
 from app.indicators import calculate_all_indicators
 from app.models import FastForexModel, DetailedForexModel
 
@@ -39,6 +39,7 @@ class AppState:
             "oanda": "",
             "alpha_vantage": ""
         }
+        self.history_lookback = "1 Month"
         
         # Data storage
         self.raw_df: Optional[pd.DataFrame] = None
@@ -77,6 +78,7 @@ class ConfigUpdate(BaseModel):
     data_source: Optional[str] = None
     api_keys: Optional[Dict[str, str]] = None
     simulation_speed: Optional[float] = None
+    history_lookback: Optional[str] = None
 
 class SimulationControl(BaseModel):
     action: str  # "start", "stop", "reset"
@@ -86,27 +88,56 @@ def load_data():
     """Loads historical data based on current configurations."""
     try:
         if state.data_source == "Yahoo Finance":
-            # Map intervals to standard periods
-            period = "60d"  # default for 5m
-            if state.selected_timeframe == "1-minute":
-                period = "7d"
-            elif state.selected_timeframe == "1-hour":
-                period = "1y"
-            elif state.selected_timeframe in ["Daily", "Weekly"]:
-                period = "5y"
+            lookback_map = {
+                "1 Day": "1d",
+                "5 Days": "5d",
+                "1 Month": "1mo",
+                "3 Months": "3mo",
+                "6 Months": "6mo",
+                "1 Year": "1y",
+                "Max": "max"
+            }
+            period = lookback_map.get(state.history_lookback, "1mo")
+            
+            # Apply yfinance limits for intraday data
+            if state.selected_timeframe == "1-minute" or state.selected_timeframe.endswith("-second"):
+                if period not in ["1d", "5d", "7d"]:
+                    period = "7d"
+            elif state.selected_timeframe in ["5-minute", "15-minute", "30-minute"]:
+                if period not in ["1d", "5d", "1mo"]:
+                    period = "60d"
                 
             df = download_yf_data(state.selected_pair, state.selected_timeframe, period)
             state.raw_df = df
             state.processed_df = calculate_all_indicators(df)
             state.custom_file_path = None
-        elif state.custom_file_path and os.path.exists(state.custom_file_path):
-            df = parse_custom_csv(state.custom_file_path, state.data_source)
+        elif state.data_source == "Twelve Data":
+            if not state.api_keys.get("twelve_data"):
+                raise ValueError("Twelve Data API key is missing. Add it in the Data Center.")
+            # period doesn't matter much since we use count=1000, but we can pass it
+            df = download_twelvedata(state.selected_pair, state.selected_timeframe, state.api_keys["twelve_data"])
             state.raw_df = df
             state.processed_df = calculate_all_indicators(df)
+            state.custom_file_path = None
+        elif state.data_source == "Oanda":
+            if not state.api_keys.get("oanda"):
+                raise ValueError("OANDA API key is missing. Add it in the Data Center.")
+            df = download_oanda(state.selected_pair, state.selected_timeframe, state.api_keys["oanda"])
+            state.raw_df = df
+            state.processed_df = calculate_all_indicators(df)
+            state.custom_file_path = None
         else:
-            # Fallback to default Yahoo Finance if no custom file uploaded yet
-            state.data_source = "Yahoo Finance"
-            load_data()
+            expected_path = f"data/uploaded_{state.data_source.lower()}.csv"
+            if os.path.exists(expected_path):
+                state.custom_file_path = expected_path
+                df = parse_custom_csv(state.custom_file_path, state.data_source)
+                state.raw_df = df
+                state.processed_df = calculate_all_indicators(df)
+            else:
+                # No data yet for this source, wait for CSV upload
+                state.raw_df = None
+                state.processed_df = pd.DataFrame()
+                state.custom_file_path = None
     except Exception as e:
         print(f"Error loading data: {e}")
         # Default empty fallback
@@ -133,7 +164,8 @@ def get_config():
         "simulation_speed": state.simulation_speed,
         "simulation_active": state.simulation_active,
         "has_fast_model": True, # Always loaded/fallback exists
-        "has_detailed_model": state.detailed_model.trained
+        "has_detailed_model": state.detailed_model.trained,
+        "history_lookback": state.history_lookback
     }
 
 @app.post("/api/config")
@@ -150,6 +182,8 @@ def update_config(config: ConfigUpdate):
         state.api_keys.update(config.api_keys)
     if config.simulation_speed is not None:
         state.simulation_speed = config.simulation_speed
+    if config.history_lookback is not None:
+        state.history_lookback = config.history_lookback
         
     # Re-load data if pair, timeframe or source changes
     if any(x is not None for x in [config.selected_pair, config.selected_timeframe, config.data_source]):
@@ -170,8 +204,8 @@ def get_history():
     if state.processed_df is None or state.processed_df.empty:
         return []
         
-    # Return last 300 candles for chart visualization
-    chart_df = state.processed_df.tail(300).copy()
+    # Return up to 1000 candles for chart visualization based on lookback
+    chart_df = state.processed_df.tail(1000).copy()
     
     # Prepare standard TradingView format: time (epoch in sec), open, high, low, close, volume
     candles = []
@@ -214,6 +248,11 @@ def get_prediction():
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(pe)}")
         
     tf_delta_seconds = {
+        "1-second": 1,
+        "3-second": 3,
+        "5-second": 5,
+        "10-second": 10,
+        "30-second": 30,
         "1-minute": 60,
         "5-minute": 300,
         "1-hour": 3600,
@@ -365,22 +404,20 @@ def stop_simulation_task():
 
 async def run_simulation_loop():
     try:
-        # Load simulation starting data
-        if state.processed_df is None or state.processed_df.empty:
-            load_data()
-            
-        total_rows = len(state.processed_df)
-        if total_rows < 100:
-            print("Not enough data to run simulation")
-            state.simulation_active = False
-            return
-            
-        # Start simulation from the last 50 candles (giving historical context on chart)
-        state.simulation_index = max(100, total_rows - 50)
-        
-        while state.simulation_active and state.simulation_index < total_rows:
-            # Segment df up to the current simulation index
-            sim_df = state.processed_df.iloc[:state.simulation_index].copy()
+        while state.simulation_active:
+            # Refresh live data
+            try:
+                load_data()
+            except Exception as e:
+                print(f"Live data refresh failed: {e}")
+                
+            if state.processed_df is None or state.processed_df.empty:
+                print("Not enough data to run live engine")
+                state.simulation_active = False
+                return
+                
+            # Segment df up to the current absolute time (entire dataframe)
+            sim_df = state.processed_df.copy()
             
             # Last candle info
             last_candle_idx = sim_df.index[-1]
@@ -403,6 +440,11 @@ async def run_simulation_loop():
             # Forecast prices mapping (times)
             # Create future timestamps for dotted line prediction based on timeframe
             tf_delta_seconds = {
+                "1-second": 1,
+                "3-second": 3,
+                "5-second": 5,
+                "10-second": 10,
+                "30-second": 30,
                 "1-minute": 60,
                 "5-minute": 300,
                 "1-hour": 3600,
@@ -466,8 +508,7 @@ async def run_simulation_loop():
             
             await broadcast_message(payload)
             
-            # Step forward
-            state.simulation_index += 1
+            # Sleep for the live refresh interval before polling again
             await asyncio.sleep(state.simulation_speed)
             
         state.simulation_active = False
@@ -481,7 +522,7 @@ async def run_simulation_loop():
         state.simulation_active = False
 
 @app.post("/api/simulation")
-def control_simulation(control: SimulationControl):
+async def control_simulation(control: SimulationControl):
     if control.action == "start":
         if state.simulation_active:
             return {"status": "running"}

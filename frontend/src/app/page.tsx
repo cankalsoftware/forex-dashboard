@@ -20,8 +20,9 @@ export default function Home() {
     api_keys: { twelve_data: '', oanda: '', alpha_vantage: '' },
     simulation_speed: 3,
     simulation_active: false,
-    has_fast_model: true,
-    has_detailed_model: false
+    has_fast_model: false,
+    has_detailed_model: false,
+    history_lookback: '1 Month'
   });
 
   const [trainStatus, setTrainStatus] = useState({
@@ -33,6 +34,7 @@ export default function Home() {
 
   const [candles, setCandles] = useState<any[]>([]);
   const [forecast, setForecast] = useState<any[]>([]);
+  const [forecastCandles, setForecastCandles] = useState<any[]>([]);
   const [prediction, setPrediction] = useState({
     direction: 'UP',
     probability_up: 0.5,
@@ -67,12 +69,15 @@ export default function Home() {
             current_price: predData.current_price
           };
           setForecast(predData.forecast || []);
+          setForecastCandles(predData.forecast_candles || []);
         } else {
           setForecast([]);
+          setForecastCandles([]);
         }
       } catch (e) {
         console.error('Error fetching initial prediction:', e);
         setForecast([]);
+        setForecastCandles([]);
       }
       
       setPrediction(initialPrediction);
@@ -110,8 +115,9 @@ export default function Home() {
             current_price: tickData.prediction.current_price
           });
           
-          // Update forecasted dotted line
+          // Update forecasted dotted line and phantom candles
           setForecast(tickData.prediction.forecast);
+          setForecastCandles(tickData.prediction.forecast_candles || []);
 
           // Update candlesticks list
           setCandles((prevCandles) => {
@@ -193,10 +199,31 @@ export default function Home() {
   // Run on Mount
   useEffect(() => {
     connectWebSocket();
-    fetchHistory();
-
+    
+    const fetchInitialData = async () => {
+      try {
+        await fetchHistory();
+      } catch (err) {
+        console.error('Failed to fetch history', err);
+      }
+    };
+    
+    // Initial fetch
+    fetchInitialData();
+    
+    // Background polling every 5 minutes if not in live mode
+    const pollInterval = setInterval(() => {
+      setConfig(currentConfig => {
+        if (!currentConfig.simulation_active) {
+          fetchHistory();
+        }
+        return currentConfig;
+      });
+    }, 5 * 60 * 1000);
+    
     return () => {
       if (wsRef.current) wsRef.current.close();
+      clearInterval(pollInterval);
     };
   }, []);
 
@@ -237,7 +264,7 @@ export default function Home() {
           simulation_active: action === 'start'
         }));
         
-        if (action === 'reset') {
+        if (action === 'reset' || action === 'start') {
           fetchHistory();
         }
       }
@@ -350,6 +377,7 @@ export default function Home() {
             <LiveChart
               candles={candles}
               forecast={forecast}
+              forecastCandles={forecastCandles}
               selectedPair={config.selected_pair}
             />
 

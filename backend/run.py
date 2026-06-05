@@ -1,21 +1,12 @@
+# TO RUN THIS SERVER:
+# Use the virtual environment python by running this exact command in the terminal:
+# .\venv\Scripts\python.exe run.py
+
 import os
 import sys
 import subprocess
 
-# Auto-activate virtual environment if not already running inside it
-current_dir = os.path.dirname(os.path.abspath(__file__))
-# Check for Windows or Linux/Mac virtual environment path
-venv_python = os.path.join(current_dir, "venv", "Scripts", "python.exe") if os.name == "nt" else os.path.join(current_dir, "venv", "bin", "python")
-
-if os.path.exists(venv_python):
-    exec_path = os.path.abspath(sys.executable).lower()
-    venv_path = os.path.abspath(venv_python).lower()
-    if exec_path != venv_path:
-        print("Auto-activating virtual environment...")
-        # Re-launch the script using the venv's python
-        sys.exit(subprocess.call([venv_python] + sys.argv))
-
-# Now we can safely import third-party modules
+# We use the virtual environment python directly, so no auto-activation is needed here.
 import uvicorn
 
 if __name__ == "__main__":

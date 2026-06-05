@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, Key, HelpCircle, Check, AlertCircle, Link } from 'lucide-react';
+import { Upload, Key, HelpCircle, Check, AlertCircle, Link, Database } from 'lucide-react';
 
 interface DataCenterProps {
   config: {
@@ -47,6 +47,12 @@ export default function DataCenter({ config, onConfigChange, onFileUpload }: Dat
 
   return (
     <div className="rounded-2xl border border-slate-800/80 bg-slate-900/30 p-5 backdrop-blur-xl glow-subtle">
+      {/* Section Title */}
+      <div className="flex items-center gap-3 mb-4 border-b border-slate-800/40 pb-3">
+        <Database className="h-5 w-5 text-indigo-400" />
+        <h2 className="text-lg font-semibold text-slate-100">Data Management Center</h2>
+      </div>
+
       {/* Tabs */}
       <div className="flex border-b border-slate-800/60 mb-5">
         <button
