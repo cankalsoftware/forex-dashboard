@@ -1,8 +1,14 @@
 import os
+import time
 import pandas as pd
 import yfinance as yfinance_lib
 import requests
 from typing import Optional
+
+try:
+    import MetaTrader5 as mt5
+except ImportError:
+    mt5 = None
 
 # Map standard currency naming to Yahoo Finance tickers
 YF_TICKERS = {
@@ -168,6 +174,60 @@ def download_oanda(pair: str, interval: str, api_key: str, period: str = "1mo") 
         
     df['Timestamp'] = pd.to_datetime(df['Timestamp'], utc=True)
     df = df.set_index('Timestamp')
+    df = df.sort_index(ascending=True)
+    return df.astype(float)
+
+def download_mt5(pair: str, interval: str, period: str = "1mo") -> pd.DataFrame:
+    """
+    Downloads historical and live data directly from a local MetaTrader 5 terminal.
+    """
+    if mt5 is None:
+        raise ValueError("MetaTrader5 python package is not installed.")
+        
+    if not mt5.initialize():
+        error = mt5.last_error()
+        raise ValueError(f"Failed to initialize MT5 connection. Is MT5 running? Error code: {error}")
+        
+    symbol = pair.replace("/", "")  # EUR/USD -> EURUSD
+    
+    # Try to ensure symbol is visible in market watch
+    mt5.symbol_select(symbol, True)
+    
+    tf_map = {
+        "1-minute": mt5.TIMEFRAME_M1,
+        "5-minute": mt5.TIMEFRAME_M5,
+        "15-minute": mt5.TIMEFRAME_M15,
+        "30-minute": mt5.TIMEFRAME_M30,
+        "1-hour": mt5.TIMEFRAME_H1,
+        "Daily": mt5.TIMEFRAME_D1,
+        "Weekly": mt5.TIMEFRAME_W1
+    }
+    mt5_interval = tf_map.get(interval, mt5.TIMEFRAME_M5)
+    
+    # Request latest 1000 candles
+    rates = mt5.copy_rates_from_pos(symbol, mt5_interval, 0, 1000)
+    
+    if rates is None or len(rates) == 0:
+        error = mt5.last_error()
+        raise ValueError(f"Failed to get MT5 data for {symbol}. Ensure the symbol matches exactly what your broker uses (e.g. EURUSD). Error: {error}")
+        
+    df = pd.DataFrame(rates)
+    
+    # Calculate MT5 server time offset from UTC
+    tick = mt5.symbol_info_tick(symbol)
+    if tick is not None:
+        server_time = tick.time
+        local_utc_time = int(time.time())
+        # Offset in seconds, rounded to nearest hour to handle slight network delays
+        offset_seconds = round((server_time - local_utc_time) / 3600) * 3600
+        df['time'] = df['time'] - offset_seconds
+    
+    df['Timestamp'] = pd.to_datetime(df['time'], unit='s', utc=True)
+    df = df.set_index('Timestamp')
+    
+    df = df[['open', 'high', 'low', 'close', 'tick_volume']]
+    df.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+    
     df = df.sort_index(ascending=True)
     return df.astype(float)
 

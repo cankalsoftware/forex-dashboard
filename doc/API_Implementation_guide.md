@@ -28,3 +28,16 @@ I've successfully integrated both **Twelve Data** and **Oanda** into the applica
 
 > [!TIP]
 > If you ever select Twelve Data or Oanda *without* saving an API key first, the backend will gracefully show an empty chart and a prompt rather than crashing or reverting to Yahoo Finance.
+
+## MetaTrader 5 (MT5 Live app)
+
+We have also added direct live integration to your local MetaTrader 5 terminal!
+
+### 1. Requirements
+- Ensure the official MetaTrader 5 terminal is installed and running on this computer.
+- You must be logged into a broker account (demo or live).
+
+### 2. How to Use It
+- Open the Forex Dashboard.
+- In the left **Sidebar**, simply select **MT5 Live app** from the Data Source dropdown.
+- **No API keys are required!** The Python backend will securely and instantly talk to the MT5 application running in the background and pull live data.

@@ -11,7 +11,7 @@ import numpy as np
 from typing import Dict, Any, List, Optional
 import time
 
-from app.data_loader import download_yf_data, parse_custom_csv, download_twelvedata, download_oanda
+from app.data_loader import download_yf_data, parse_custom_csv, download_twelvedata, download_oanda, download_mt5
 from app.indicators import calculate_all_indicators
 from app.models import FastForexModel, DetailedForexModel
 
@@ -123,6 +123,11 @@ def load_data():
             if not state.api_keys.get("oanda"):
                 raise ValueError("OANDA API key is missing. Add it in the Data Center.")
             df = download_oanda(state.selected_pair, state.selected_timeframe, state.api_keys["oanda"])
+            state.raw_df = df
+            state.processed_df = calculate_all_indicators(df)
+            state.custom_file_path = None
+        elif state.data_source == "MetaTrader 5":
+            df = download_mt5(state.selected_pair, state.selected_timeframe, period)
             state.raw_df = df
             state.processed_df = calculate_all_indicators(df)
             state.custom_file_path = None

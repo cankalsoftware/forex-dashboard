@@ -50,7 +50,7 @@ export default function Sidebar({
     { name: 'Fast', desc: 'XGBoost/Ridge (Takes 1-5s)' },
     { name: 'Detailed', desc: 'PyTorch LSTM (Takes 1-3m)' }
   ];
-  const sources = ['Yahoo Finance', 'Twelve Data', 'Oanda', 'Dukascopy', 'HistData', 'MetaTrader'];
+  const sources = ['Yahoo Finance', 'Twelve Data', 'Oanda', 'MetaTrader 5', 'Dukascopy', 'HistData'];
   const lookbacks = ['1 Day', '5 Days', '1 Month', '3 Months', '6 Months', '1 Year', 'Max'];
 
   const getStatusBadge = () => {
@@ -148,7 +148,11 @@ export default function Sidebar({
           >
             {sources.map(source => (
               <option key={source} value={source}>
-                {source === 'Twelve Data' || source === 'Oanda' ? `${source} (Live API)` : source}
+                {['Twelve Data', 'Oanda'].includes(source) 
+                  ? `${source} (Live API)` 
+                  : source === 'MetaTrader 5' 
+                    ? 'MetaTrader 5 (Live App)' 
+                    : source}
               </option>
             ))}
           </select>

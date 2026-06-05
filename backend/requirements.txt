@@ -9,3 +9,4 @@ websockets
 torch
 python-multipart
 requests
+MetaTrader5

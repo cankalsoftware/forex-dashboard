@@ -83,8 +83,8 @@ export default function DataCenter({ config, onConfigChange, onFileUpload }: Dat
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
-            {['Dukascopy', 'HistData', 'MetaTrader'].map(src => (
+          <div className="grid grid-cols-2 gap-2">
+            {['Dukascopy', 'HistData'].map(src => (
               <button
                 key={src}
                 onClick={() => {
