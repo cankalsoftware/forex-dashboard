@@ -1,8 +1,7 @@
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import Ridge
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -23,7 +22,7 @@ class FastForexModel:
     """
     def __init__(self, forecast_horizon: int = 10):
         self.forecast_horizon = forecast_horizon
-        self.regressor = Ridge(alpha=1.0)
+        self.regressor = RandomForestRegressor(n_estimators=50, max_depth=8, random_state=42)
         self.classifier = RandomForestClassifier(n_estimators=50, max_depth=8, random_state=42)
         self.scaler = StandardScaler()
         self.feature_cols = [
@@ -105,6 +104,9 @@ class FastForexModel:
         upper_bounds = []
         lower_bounds = []
         
+        # Force override forecast horizon in case it was loaded from an old 5-candle pickle file
+        self.forecast_horizon = 10
+        
         # Scale of uncertainty increases with square root of time
         for step in range(1, self.forecast_horizon + 1):
             # Scale features and predict next log return
@@ -112,8 +114,8 @@ class FastForexModel:
             X_temp_scaled = self.scaler.transform(X_temp)
             pred_return = float(self.regressor.predict(X_temp_scaled)[0])
             
-            # Dampen prediction step-by-step
-            dampened_return = pred_return * (0.8 ** step)
+            # Reduce harsh dampening to allow more dynamic momentum curves
+            dampened_return = pred_return * (0.95 ** step)
             predicted_returns.append(dampened_return)
             
             # Calculate predicted price

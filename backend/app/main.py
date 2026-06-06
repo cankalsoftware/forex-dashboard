@@ -87,17 +87,18 @@ class SimulationControl(BaseModel):
 def load_data():
     """Loads historical data based on current configurations."""
     try:
+        lookback_map = {
+            "1 Day": "1d",
+            "5 Days": "5d",
+            "1 Month": "1mo",
+            "3 Months": "3mo",
+            "6 Months": "6mo",
+            "1 Year": "1y",
+            "Max": "max"
+        }
+        period = lookback_map.get(state.history_lookback, "1mo")
+
         if state.data_source == "Yahoo Finance":
-            lookback_map = {
-                "1 Day": "1d",
-                "5 Days": "5d",
-                "1 Month": "1mo",
-                "3 Months": "3mo",
-                "6 Months": "6mo",
-                "1 Year": "1y",
-                "Max": "max"
-            }
-            period = lookback_map.get(state.history_lookback, "1mo")
             
             # Apply yfinance limits for intraday data
             if state.selected_timeframe == "1-minute" or state.selected_timeframe.endswith("-second"):

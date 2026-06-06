@@ -145,9 +145,14 @@ export default function LiveChart({ candles, forecast, forecastCandles = [], sel
   useEffect(() => {
     if (!candleSeriesRef.current || !forecastSeriesRef.current || !upperCorridorRef.current || !lowerCorridorRef.current || !chartRef.current) return;
 
+    // Calculate browser's timezone offset in seconds (e.g. UTC+1 = -60 mins = -3600 secs)
+    // We subtract the offset to shift the UTC timestamp forward/backward so the chart displays local time
+    const tzOffsetSeconds = new Date().getTimezoneOffset() * 60;
+    const toLocalTime = (utcTime: number) => utcTime - tzOffsetSeconds;
+
     // 1. Set historical candles
     const formattedCandles: CandlestickData[] = candles.map(c => ({
-      time: c.time,
+      time: toLocalTime(c.time) as any,
       open: c.open,
       high: c.high,
       low: c.low,
@@ -220,9 +225,9 @@ export default function LiveChart({ candles, forecast, forecastCandles = [], sel
       }
 
       forecast.forEach(f => {
-        formattedForecast.push({ time: f.time, value: f.value });
-        formattedUpper.push({ time: f.time, value: f.upper });
-        formattedLower.push({ time: f.time, value: f.lower });
+        formattedForecast.push({ time: toLocalTime(f.time) as any, value: f.value });
+        formattedUpper.push({ time: toLocalTime(f.time) as any, value: f.upper });
+        formattedLower.push({ time: toLocalTime(f.time) as any, value: f.lower });
       });
 
       // Sort forecasts
@@ -249,17 +254,17 @@ export default function LiveChart({ candles, forecast, forecastCandles = [], sel
 
     // 3. Set forecast phantom candles
     if (forecastCandles && forecastCandles.length > 0) {
-      const formattedFCandles = forecastCandles.map(c => ({
-        time: c.time,
+      const formattedPhantom: CandlestickData[] = forecastCandles.map(c => ({
+        time: toLocalTime(c.time) as any,
         open: c.open,
         high: c.high,
         low: c.low,
         close: c.close,
       }));
-      formattedFCandles.sort((a, b) => (a.time as number) - (b.time as number));
+      formattedPhantom.sort((a, b) => (a.time as number) - (b.time as number));
       const filterUnique = (arr: any[]) => arr.filter((c, i, a) => i === a.length - 1 || c.time !== a[i + 1].time);
       
-      forecastCandleSeriesRef.current?.setData(filterUnique(formattedFCandles));
+      forecastCandleSeriesRef.current?.setData(filterUnique(formattedPhantom));
     } else {
       forecastCandleSeriesRef.current?.setData([]);
     }

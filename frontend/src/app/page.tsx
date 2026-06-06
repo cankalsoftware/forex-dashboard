@@ -243,9 +243,13 @@ export default function Home() {
         if (newConfig.selected_pair || newConfig.selected_timeframe || newConfig.data_source) {
           await fetchHistory();
         }
+      } else {
+        const errorData = await res.json();
+        alert(`Configuration Error: ${errorData.detail}`);
       }
     } catch (e) {
       console.error('Error updating config:', e);
+      alert('Failed to connect to the backend server.');
     }
   };
 
