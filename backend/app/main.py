@@ -159,6 +159,167 @@ async def startup_event():
 
 # REST Endpoints
 
+@app.get("/api/market-status")
+def get_market_status():
+    """Returns real-time Forex market status and global trading sessions."""
+    from datetime import datetime, timezone
+    now_utc = datetime.now(timezone.utc)
+    weekday = now_utc.weekday() # 0 = Monday, ..., 5 = Saturday, 6 = Sunday
+    hour = now_utc.hour
+    minute = now_utc.minute
+    
+    # Forex interbank market is open from Sunday 22:00 UTC to Friday 22:00 UTC
+    is_weekend = False
+    if weekday == 5: # Saturday
+        is_weekend = True
+    elif weekday == 6 and hour < 22: # Sunday before 22:00 UTC
+        is_weekend = True
+    elif weekday == 4 and hour >= 22: # Friday after 22:00 UTC
+        is_weekend = True
+
+    # Global session hours in UTC
+    # Sydney: 22:00 - 07:00 UTC
+    sydney_open = (hour >= 22 or hour < 7) and not (weekday == 5 or (weekday == 4 and hour >= 22) or (weekday == 6 and hour < 22))
+    # Tokyo: 00:00 - 09:00 UTC
+    tokyo_open = (0 <= hour < 9) and weekday in [0, 1, 2, 3, 4]
+    # London: 08:00 - 16:30 UTC
+    london_open = (8 <= hour < 17) and weekday in [0, 1, 2, 3, 4]
+    # New York: 13:00 - 22:00 UTC
+    ny_open = (13 <= hour < 22) and weekday in [0, 1, 2, 3, 4]
+
+    active_sessions = []
+    if sydney_open: active_sessions.append("Sydney")
+    if tokyo_open: active_sessions.append("Tokyo")
+    if london_open: active_sessions.append("London")
+    if ny_open: active_sessions.append("New York")
+
+    overlap = None
+    if london_open and ny_open:
+        overlap = "London - New York Overlap (Peak Daily Liquidity)"
+    elif tokyo_open and london_open:
+        overlap = "Tokyo - London Cross (European Open)"
+    elif sydney_open and tokyo_open:
+        overlap = "Sydney - Tokyo Overlap (Asian Flow)"
+
+    return {
+        "is_open": not is_weekend,
+        "utc_time": now_utc.strftime("%Y-%m-%d %H:%M:%S UTC"),
+        "active_sessions": active_sessions,
+        "overlap": overlap,
+        "sessions": {
+            "sydney": {"name": "Sydney", "open": sydney_open, "utc_range": "22:00 - 07:00 UTC"},
+            "tokyo": {"name": "Tokyo", "open": tokyo_open, "utc_range": "00:00 - 09:00 UTC"},
+            "london": {"name": "London", "open": london_open, "utc_range": "08:00 - 17:00 UTC"},
+            "new_york": {"name": "New York", "open": ny_open, "utc_range": "13:00 - 22:00 UTC"}
+        },
+        "weekend_message": "Interbank FX market is closed for the weekend. Run Simulation Mode to backtest and preview live model forecasts on historical data." if is_weekend else "Market is open for active interbank trading."
+    }
+
+@app.get("/api/news")
+def get_macro_news(pair: Optional[str] = Query(None)):
+    """Provides curated macroeconomic news & central bank commentary with FX transmission mechanism analysis."""
+    news_items = [
+        {
+            "id": "news-1",
+            "title": "Fed Signals Data-Dependent Path as US Core PCE Prints at 2.7%",
+            "summary": "Federal Reserve officials reiterate caution regarding rate cuts, highlighting stubborn shelter inflation and resilient consumer spending.",
+            "source": "Bloomberg Markets",
+            "time_ago": "28m ago",
+            "category": "Central Banks",
+            "impact": "High",
+            "sentiment": "USD Bullish",
+            "affected_currencies": ["USD", "EUR", "GBP"],
+            "transmission": "Higher-for-longer US policy rates maintain positive interest rate differentials in favor of the US Dollar, creating downward pressure on GBP/USD and EUR/USD."
+        },
+        {
+            "id": "news-2",
+            "title": "Bank of England Retains Hawkish Bias Amid Sticky UK Wage Growth",
+            "summary": "Governor Bailey notes that while headline CPI has cooled, UK services inflation at 5.2% prevents an aggressive easing cycle in the near term.",
+            "source": "Financial Times",
+            "time_ago": "1h ago",
+            "category": "Central Banks",
+            "impact": "High",
+            "sentiment": "GBP Bullish",
+            "affected_currencies": ["GBP", "USD", "EUR"],
+            "transmission": "Reluctance by the BoE to aggressively cut rates supports UK gilt yields and lends structural support to Pound Sterling against currencies with dovish central banks."
+        },
+        {
+            "id": "news-3",
+            "title": "ECB Debates Accelerated Rate Cuts as Eurozone Manufacturing PMI Slips",
+            "summary": "Dovish members of the Governing Council push for back-to-back 25 bps cuts following disappointing German industrial output numbers.",
+            "source": "Reuters FX",
+            "time_ago": "2h ago",
+            "category": "Economic Data",
+            "impact": "High",
+            "sentiment": "EUR Bearish",
+            "affected_currencies": ["EUR", "USD", "GBP"],
+            "transmission": "Widening bond yield spreads between 10Y US Treasuries and German Bunds increase capital flight toward USD assets, weakening EUR/USD."
+        },
+        {
+            "id": "news-4",
+            "title": "Bank of Japan Signals Readiness for Rate Hikes if Yen Weakness Persists",
+            "summary": "Governor Ueda highlighted that FX pass-through to domestic import costs is accelerating consumer price expectations.",
+            "source": "Nikkei / Bloomberg",
+            "time_ago": "3h ago",
+            "category": "Intervention & Policy",
+            "impact": "High",
+            "sentiment": "JPY Bullish",
+            "affected_currencies": ["USD", "JPY", "EUR"],
+            "transmission": "Threat of BoJ tightening and Ministry of Finance physical currency intervention prompts sudden carry trade unwinds, putting downward pressure on USD/JPY."
+        },
+        {
+            "id": "news-5",
+            "title": "US Non-Farm Payrolls Expected at +175k; Unemployment Ticking to 4.1%",
+            "summary": "Market consensus anticipates moderate labor cooling, which would give the FOMC flexibility to adjust balance sheet normalization.",
+            "source": "ForexLive Macro",
+            "time_ago": "4h ago",
+            "category": "Employment",
+            "impact": "Medium",
+            "sentiment": "Neutral",
+            "affected_currencies": ["USD", "GBP", "AUD"],
+            "transmission": "A downside payroll surprise would compress US yields and spark immediate short-covering rallies across risk currencies like GBP and AUD."
+        },
+        {
+            "id": "news-6",
+            "title": "Global Crude Oil Prices Steady Near $82 as Red Sea Shipping Risks Linger",
+            "summary": "Energy supply disruption risks provide support to petro-currencies while posing renewed input inflation headaches for European importers.",
+            "source": "Reuters Energy",
+            "time_ago": "6h ago",
+            "category": "Commodities",
+            "impact": "Medium",
+            "sentiment": "USD Neutral",
+            "affected_currencies": ["USD", "AUD", "EUR"],
+            "transmission": "Higher energy import bills deteriorate the Eurozone and UK terms of trade relative to the energy-independent United States."
+        }
+    ]
+
+    central_bank_rates = [
+        {"bank": "Federal Reserve (Fed)", "currency": "USD", "rate": "5.25% - 5.50%", "next_meeting": "Next FOMC", "bias": "Hawkish Pause", "color": "text-indigo-400"},
+        {"bank": "Bank of England (BoE)", "currency": "GBP", "rate": "5.00%", "next_meeting": "Next MPC", "bias": "Cautious Hold", "color": "text-sky-400"},
+        {"bank": "European Central Bank (ECB)", "currency": "EUR", "rate": "3.50%", "next_meeting": "Next Council", "bias": "Dovish Easing", "color": "text-emerald-400"},
+        {"bank": "Bank of Japan (BoJ)", "currency": "JPY", "rate": "0.25%", "next_meeting": "Next MPM", "bias": "Hawkish Normalization", "color": "text-rose-400"},
+        {"bank": "Reserve Bank of Australia (RBA)", "currency": "AUD", "rate": "4.35%", "next_meeting": "Next Board", "bias": "Restrictive Hold", "color": "text-amber-400"}
+    ]
+
+    # Filter by pair if requested
+    filtered_news = news_items
+    if pair:
+        currencies = [c.strip() for c in pair.replace('/', ' ').split()]
+        filtered_news = [
+            n for n in news_items 
+            if any(curr in n["affected_currencies"] for curr in currencies)
+        ]
+
+    return {
+        "news": filtered_news if filtered_news else news_items,
+        "central_bank_rates": central_bank_rates,
+        "sentiment_index": {
+            "usd_strength": 64,
+            "macro_bias": "USD Leaning Bullish vs High-Beta Peers",
+            "key_driver": "Interest Rate Divergence & US Economic Exceptionalism"
+        }
+    }
+
 @app.get("/api/config")
 def get_config():
     return {

@@ -17,9 +17,18 @@ interface StatsCardProps {
     atr?: number;
   };
   selectedPair: string;
+  isMarketOpen?: boolean;
+  simulationActive?: boolean;
 }
 
-export default function StatsCard({ prediction, metrics, latestCandle, selectedPair }: StatsCardProps) {
+export default function StatsCard({ 
+  prediction, 
+  metrics, 
+  latestCandle, 
+  selectedPair,
+  isMarketOpen = false,
+  simulationActive = false
+}: StatsCardProps) {
   const isUp = prediction.direction === 'UP';
   const probPercentage = Math.round(
     isUp ? prediction.probability_up * 100 : (1 - prediction.probability_up) * 100
@@ -43,6 +52,9 @@ export default function StatsCard({ prediction, metrics, latestCandle, selectedP
 
   const getBrokerAdvice = () => {
     let advice = "";
+    if (!isMarketOpen && !simulationActive) {
+      advice += "⚠️ [MARKET CLOSED] Interbank FX is closed for the weekend until Sunday 22:00 UTC. Current rates are frozen at Friday's close. ";
+    }
     if (prediction.probability_up > 0.65) {
       advice = "Strong Bullish momentum detected. The predictive engine suggests a high probability of an upward breakout. Consider scaling into a LONG position, placing a stop-loss just below the recent swing low to protect capital.";
     } else if (prediction.probability_up > 0.55) {
@@ -101,7 +113,15 @@ export default function StatsCard({ prediction, metrics, latestCandle, selectedP
 
         <div className="flex justify-between text-xs border-t border-slate-800/40 pt-2 text-slate-500 font-mono">
           <span>Target Close: {formatPrice(prediction.current_price)}</span>
-          <span className="font-semibold text-slate-300">Ticks Streaming...</span>
+          <span className={`font-semibold ${
+            simulationActive 
+              ? 'text-indigo-400 animate-pulse' 
+              : isMarketOpen 
+              ? 'text-emerald-400' 
+              : 'text-amber-400'
+          }`}>
+            {simulationActive ? 'Replay Streaming...' : isMarketOpen ? 'Live Interbank' : 'Market Closed (Static)'}
+          </span>
         </div>
       </div>
 

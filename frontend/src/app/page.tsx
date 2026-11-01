@@ -5,7 +5,11 @@ import Sidebar from '@/components/Sidebar';
 import LiveChart from '@/components/LiveChart';
 import StatsCard from '@/components/StatsCard';
 import DataCenter from '@/components/DataCenter';
-import { ShieldAlert, Info } from 'lucide-react';
+import MarketSessions from '@/components/MarketSessions';
+import MarketNoticeBanner from '@/components/MarketNoticeBanner';
+import MacroTicker from '@/components/MacroTicker';
+import MacroNews from '@/components/MacroNews';
+import { ShieldAlert, Info, Newspaper, Database, BookOpen, Sparkles, TrendingUp } from 'lucide-react';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000/ws';
@@ -40,6 +44,28 @@ export default function Home() {
     probability_up: 0.5,
     current_price: 0
   });
+
+  // Real-time market status (Interbank FX opens Sunday 22:00 UTC - Friday 22:00 UTC)
+  const isMarketOpenNow = () => {
+    const now = new Date();
+    const day = now.getUTCDay();
+    const hour = now.getUTCHours();
+    if (day === 6) return false;
+    if (day === 0 && hour < 22) return false;
+    if (day === 5 && hour >= 22) return false;
+    return true;
+  };
+  const [marketOpen, setMarketOpen] = useState(isMarketOpenNow());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setMarketOpen(isMarketOpenNow());
+    }, 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Active Bottom Tab: 'news' | 'data' | 'playbook'
+  const [activeBottomTab, setActiveBottomTab] = useState<'news' | 'data' | 'playbook'>('news');
 
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -313,38 +339,72 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-6 lg:p-8 font-sans selection:bg-indigo-500/30">
-      <div className="max-w-7xl mx-auto flex flex-col gap-6">
+    <main className="min-h-screen bg-slate-950 text-slate-100 p-3 sm:p-5 lg:p-7 font-sans selection:bg-indigo-500/30">
+      <div className="max-w-7xl mx-auto flex flex-col gap-5">
         
-        {/* Main Header / Title Bar */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900/10 border border-slate-900/50 rounded-2xl p-5 backdrop-blur-xl glow-subtle">
-          <div>
-            <h1 className="text-xl md:text-2xl font-black bg-gradient-to-r from-slate-50 to-slate-300 bg-clip-text text-transparent">
-              Forex Predictor Dashboard
-            </h1>
-            <p className="text-xs text-slate-400 mt-1 font-medium">
-              ML-driven directional predictions, real-time indicators, and path forecasting.
-            </p>
+        {/* Prominent Market Closed Notification Banner (Appears whenever market is offline) */}
+        <MarketNoticeBanner
+          simulationActive={config.simulation_active}
+          onStartSimulation={() => handleSimulationAction('start')}
+        />
+
+        {/* Top Header / Brand Bar */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900/40 border border-slate-800/80 rounded-2xl p-4 sm:p-5 backdrop-blur-xl glow-subtle">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/25">
+              <TrendingUp className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl sm:text-2xl font-black bg-gradient-to-r from-slate-50 via-slate-100 to-indigo-200 bg-clip-text text-transparent">
+                  Antigravity FX Terminal
+                </h1>
+                <span className="hidden sm:inline-block px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 text-[10px] font-bold tracking-wider uppercase">
+                  Macro & ML Edition
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5 font-medium">
+                Institutional Macro Sentiment, Central Bank Monitor & Deep Learning Price Path Forecasting.
+              </p>
+            </div>
           </div>
           
           {/* Active Status metrics */}
-          <div className="flex gap-4 text-xs">
+          <div className="flex items-center gap-3 text-xs bg-slate-950/60 border border-slate-800/80 rounded-xl px-4 py-2.5">
             <div className="flex flex-col items-end">
-              <span className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Data Ticker</span>
-              <span className="font-semibold text-slate-200 mt-0.5">{config.data_source}</span>
+              <span className="text-slate-500 font-bold uppercase tracking-wider text-[9px]">Pair</span>
+              <span className="font-bold text-slate-100">{config.selected_pair}</span>
             </div>
-            <div className="h-8 w-px bg-slate-800" />
+            <div className="h-6 w-px bg-slate-800" />
             <div className="flex flex-col items-end">
-              <span className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Active Model</span>
-              <span className="font-semibold text-indigo-400 mt-0.5">{config.selected_model_type} Model</span>
+              <span className="text-slate-500 font-bold uppercase tracking-wider text-[9px]">Timeframe</span>
+              <span className="font-semibold text-slate-200">{config.selected_timeframe}</span>
             </div>
-            <div className="h-8 w-px bg-slate-800" />
+            <div className="h-6 w-px bg-slate-800" />
             <div className="flex flex-col items-end">
-              <span className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Current Timeframe</span>
-              <span className="font-semibold text-slate-200 mt-0.5">{config.selected_timeframe}</span>
+              <span className="text-slate-500 font-bold uppercase tracking-wider text-[9px]">Engine</span>
+              <span className="font-semibold text-indigo-400">{config.selected_model_type} Model</span>
+            </div>
+            <div className="h-6 w-px bg-slate-800" />
+            <div className="flex flex-col items-end">
+              <span className="text-slate-500 font-bold uppercase tracking-wider text-[9px]">Feed</span>
+              <span className="font-semibold text-slate-200">{config.data_source}</span>
             </div>
           </div>
         </div>
+
+        {/* Global Market Sessions Clock & Weekend Status */}
+        <MarketSessions
+          simulationActive={config.simulation_active}
+          onStartSimulation={() => handleSimulationAction('start')}
+        />
+
+        {/* Quick Macro Ticker & Pair Selector */}
+        <MacroTicker
+          selectedPair={config.selected_pair}
+          onSelectPair={(pair) => handleConfigChange({ selected_pair: pair })}
+          latestPrice={candles.length > 0 ? candles[candles.length - 1].close : undefined}
+        />
 
         {/* Info Notification if model not trained */}
         {config.selected_model_type === 'Detailed' && !config.has_detailed_model && (
@@ -375,6 +435,8 @@ export default function Home() {
               metrics={trainStatus.results}
               latestCandle={candles.length > 0 ? candles[candles.length - 1] : {}}
               selectedPair={config.selected_pair}
+              isMarketOpen={marketOpen}
+              simulationActive={config.simulation_active}
             />
 
             {/* Live-updating chart widget */}
@@ -383,14 +445,118 @@ export default function Home() {
               forecast={forecast}
               forecastCandles={forecastCandles}
               selectedPair={config.selected_pair}
+              isMarketOpen={marketOpen}
+              simulationActive={config.simulation_active}
             />
 
-            {/* Custom file parser & APIs configurations */}
-            <DataCenter
-              config={config}
-              onConfigChange={handleConfigChange}
-              onFileUpload={handleFileUpload}
-            />
+            {/* Intuitive Lower Tab Navigation */}
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+                <button
+                  onClick={() => setActiveBottomTab('news')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeBottomTab === 'news'
+                      ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/40 shadow-sm shadow-indigo-500/10'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                  }`}
+                >
+                  <Newspaper className="h-4 w-4" />
+                  <span>Macro News Wire & Central Banks</span>
+                  <span className="ml-1 px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 text-[10px]">
+                    Live
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setActiveBottomTab('data')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeBottomTab === 'data'
+                      ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/40 shadow-sm shadow-indigo-500/10'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                  }`}
+                >
+                  <Database className="h-4 w-4" />
+                  <span>Data Center & APIs</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveBottomTab('playbook')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeBottomTab === 'playbook'
+                      ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/40 shadow-sm shadow-indigo-500/10'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                  }`}
+                >
+                  <BookOpen className="h-4 w-4" />
+                  <span>Economist Playbook</span>
+                </button>
+              </div>
+
+              {/* Tab Content 1: Macro News Wire */}
+              {activeBottomTab === 'news' && (
+                <MacroNews
+                  selectedPair={config.selected_pair}
+                  backendUrl={BACKEND_URL}
+                />
+              )}
+
+              {/* Tab Content 2: Data Center */}
+              {activeBottomTab === 'data' && (
+                <DataCenter
+                  config={config}
+                  onConfigChange={handleConfigChange}
+                  onFileUpload={handleFileUpload}
+                />
+              )}
+
+              {/* Tab Content 3: Economist Playbook */}
+              {activeBottomTab === 'playbook' && (
+                <div className="rounded-2xl border border-slate-800/80 bg-slate-900/40 p-5 backdrop-blur-xl flex flex-col gap-4 text-xs">
+                  <div className="flex items-center gap-2 pb-2 border-b border-slate-800 text-slate-200 font-bold text-sm">
+                    <BookOpen className="h-4 w-4 text-indigo-400" />
+                    Professional Forex Economist Macro Framework
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800/80">
+                      <h4 className="font-bold text-slate-100 flex items-center gap-2">
+                        🏛️ 1. Interest Rate Parity & Central Banks
+                      </h4>
+                      <p className="text-slate-400 mt-1.5 leading-relaxed">
+                        Currencies are fundamentally priced on <strong>real yield differentials</strong>. When a central bank (e.g. the Federal Reserve) holds interest rates at 5.50% while the ECB cuts rates to 3.50%, global capital flows into higher-yielding USD sovereign debt, bidding up the Dollar against the Euro.
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800/80">
+                      <h4 className="font-bold text-slate-100 flex items-center gap-2">
+                        📈 2. Inflation (CPI/PCE) vs Growth (GDP/PMI)
+                      </h4>
+                      <p className="text-slate-400 mt-1.5 leading-relaxed">
+                        Inflation reports dictate the monetary path. Higher-than-expected CPI forces central banks to remain restrictive (bullish for the domestic currency). However, if high inflation causes a severe economic contraction (stagflation), capital flees, leading to sudden currency sell-offs.
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800/80">
+                      <h4 className="font-bold text-slate-100 flex items-center gap-2">
+                        ⚖️ 3. Safe-Haven vs High-Beta Currencies
+                      </h4>
+                      <p className="text-slate-400 mt-1.5 leading-relaxed">
+                        During geopolitical tensions or global market sell-offs, traders seek <strong>Safe Havens</strong> (USD, CHF, JPY). When market sentiment is risk-on, capital flows into <strong>High-Beta/Commodity Currencies</strong> (AUD, NZD, CAD, GBP) chasing economic expansion.
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800/80">
+                      <h4 className="font-bold text-slate-100 flex items-center gap-2">
+                        🔁 4. How Technical ML Aligns with Macro
+                      </h4>
+                      <p className="text-slate-400 mt-1.5 leading-relaxed">
+                        Our ML models capture short-to-medium term momentum, RSI overextension, and ATR volatility bands. When the <strong>AI Directional Signal (e.g. BULLISH) aligns with the Macro Sentiment Wire (e.g. USD Strong)</strong>, statistical win probability increases significantly.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -8,9 +8,18 @@ interface LiveChartProps {
   forecast: any[]; // Forecast data: {time, value, upper, lower}
   forecastCandles?: any[]; // Forecast phantom candles
   selectedPair: string;
+  isMarketOpen?: boolean;
+  simulationActive?: boolean;
 }
 
-export default function LiveChart({ candles, forecast, forecastCandles = [], selectedPair }: LiveChartProps) {
+export default function LiveChart({ 
+  candles, 
+  forecast, 
+  forecastCandles = [], 
+  selectedPair,
+  isMarketOpen = false,
+  simulationActive = false
+}: LiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -273,12 +282,33 @@ export default function LiveChart({ candles, forecast, forecastCandles = [], sel
 
   return (
     <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/40 p-4 backdrop-blur-xl glow-subtle">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
         <div className="flex items-center gap-3">
-          <span className="flex h-3 h-3 w-3 rounded-full bg-emerald-500 animate-pulse"></span>
+          {simulationActive ? (
+            <span className="flex h-3 w-3 rounded-full bg-indigo-500 animate-ping" title="Simulation Active" />
+          ) : isMarketOpen ? (
+            <span className="flex h-3 w-3 rounded-full bg-emerald-500 animate-pulse" title="Interbank Open" />
+          ) : (
+            <span className="flex h-3 w-3 rounded-full bg-amber-500" title="Market Closed" />
+          )}
+
           <h2 className="text-lg font-semibold text-slate-100">{selectedPair} Live Chart</h2>
+
+          {simulationActive ? (
+            <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 text-[10px] font-bold uppercase tracking-wider">
+              Simulation Replay
+            </span>
+          ) : !isMarketOpen ? (
+            <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-bold uppercase tracking-wider">
+              Market Closed (Price Frozen)
+            </span>
+          ) : (
+            <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold uppercase tracking-wider">
+              Live Feed
+            </span>
+          )}
         </div>
-        <div className="flex gap-2 text-xs text-slate-400">
+        <div className="flex flex-wrap gap-2 text-xs text-slate-400">
           <span className="flex items-center gap-1"><span className="h-1.5 w-3 bg-[#10b981] inline-block rounded"></span> Bullish</span>
           <span className="flex items-center gap-1"><span className="h-1.5 w-3 bg-[#ef4444] inline-block rounded"></span> Bearish</span>
           <span className="flex items-center gap-1"><span className="h-1.5 w-3 bg-[#6366f1] inline-block rounded border border-dashed border-[#6366f1]"></span> Prediction</span>
